@@ -65,4 +65,4 @@ The output files will be generated in the `release/` directory.
 
 ## License
 
-[MIT](LICENSE)
+[GPLv3](LICENSE)
