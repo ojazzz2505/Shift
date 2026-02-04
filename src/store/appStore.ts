@@ -132,7 +132,7 @@ export const useAppStore = create<AppState>()(
             clearCompleted: () => set((state) => ({ tasks: state.tasks.filter(t => t.status !== 'done') })),
         }),
         {
-            name: 'omni-storage',
+            name: 'shift-storage',
             partialize: (state) => ({
                 outputPaths: state.outputPaths,
                 archive: state.archive,
