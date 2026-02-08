@@ -40,7 +40,7 @@ export default function SmartDropdown({ options, value, onChange, align = 'left'
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                        className={`absolute z-[100] top-full mt-2 w-48 bg-[#121212] border border-neutral-800 rounded-xl shadow-2xl overflow-hidden py-1 max-h-64 overflow-y-auto custom-scrollbar ${align === 'right' ? 'right-0' : 'left-0'}`}
+                        className={`absolute z-[100] top-full mt-2 w-full bg-[#121212] border border-neutral-800 rounded-xl shadow-2xl overflow-hidden py-1 max-h-64 overflow-y-auto custom-scrollbar ${align === 'right' ? 'right-0' : 'left-0'}`}
                     >
                         {options.map((opt) => (
                             <div

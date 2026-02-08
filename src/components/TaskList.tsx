@@ -6,9 +6,10 @@ interface TaskListProps {
     tasks: Task[]
     onRemove: (id: string) => void
     onFormatChange: (id: string, format: string) => void
+    onEditMetadata: (id: string) => void
 }
 
-export default function TaskList({ tasks, onRemove, onFormatChange }: TaskListProps) {
+export default function TaskList({ tasks, onRemove, onFormatChange, onEditMetadata }: TaskListProps) {
     return (
         <div className="flex-1 overflow-y-auto pr-1 -mr-1 custom-scrollbar">
             <div className="space-y-2 pb-2">
@@ -27,6 +28,7 @@ export default function TaskList({ tasks, onRemove, onFormatChange }: TaskListPr
                             availableFormats={task.availableFormats}
                             onRemove={() => onRemove(task.id)}
                             onFormatChange={(fmt) => onFormatChange(task.id, fmt)}
+                            onEditMetadata={() => onEditMetadata(task.id)}
                         />
                     ))}
                 </AnimatePresence>

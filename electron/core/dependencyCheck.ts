@@ -41,6 +41,24 @@ function findBinary(name: string): DependencyStatus {
     return { name, found: false, path: null, version: null }
 }
 
+/**
+ * Check binary with optional alias filenames (for odd Windows exe names)
+ */
+function findBinaryWithAliases(name: string, aliases: string[]): DependencyStatus {
+    const binDir = getBinDir()
+    const candidates = [name, ...aliases].map(n =>
+        path.join(binDir, process.platform === 'win32' ? `${n}.exe` : n)
+    )
+
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+            return { name, found: true, path: candidate, version: 'installed' }
+        }
+    }
+
+    return { name, found: false, path: null, version: null }
+}
+
 import { execSync } from 'child_process'
 
 // ... imports
@@ -74,6 +92,7 @@ function findSystemDependency(name: string, checkCmd: string, versionParseRegex?
  */
 export function checkDependencies(): DependencyStatus[] {
     const ffmpeg = findBinary('ffmpeg')
+    const exiftool = findBinaryWithAliases('exiftool', ['exiftool(-k)'])
     const pandoc = findBinary('pandoc')
     const pdftotext = findBinary('pdftotext')
 
@@ -112,7 +131,7 @@ export function checkDependencies(): DependencyStatus[] {
     xpdf.name = 'xpdf'
 
     // Note: LibreOffice removed - requires manual installation due to size (300MB+)
-    return [ffmpeg, imagemagick, pandoc, xpdf, python, pdf2docx]
+    return [ffmpeg, exiftool, imagemagick, pandoc, xpdf, python, pdf2docx]
 }
 
 /**

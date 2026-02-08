@@ -88,7 +88,7 @@ export function registerHandlers(ipcMain: IpcMain) {
     })
 
     // Start conversion
-    ipcMain.handle('startConversion', async (event, { taskId, inputPath, targetFormat, outputDir }) => {
+    ipcMain.handle('startConversion', async (event, { taskId, inputPath, targetFormat, outputDir, metadata }) => {
         const { convert } = await import('../core/engine')
         const { stat } = await import('node:fs/promises')
 
@@ -97,7 +97,7 @@ export function registerHandlers(ipcMain: IpcMain) {
         }
 
         try {
-            const outputPath = await convert(taskId, inputPath, targetFormat, outputDir, onProgress)
+            const outputPath = await convert(taskId, inputPath, targetFormat, outputDir, onProgress, metadata)
             // Get output file size
             const stats = await stat(outputPath)
             return { success: true, outputPath, outputSize: stats.size }
@@ -166,5 +166,16 @@ export function registerHandlers(ipcMain: IpcMain) {
             console.error(`Failed to save ${type}:`, error)
             return { success: false, error: error.message }
         }
+    })
+
+    // Metadata Handlers
+    ipcMain.handle('readMetadata', async (_event, filePath: string) => {
+        const { readMetadata } = await import('../core/metadata')
+        return await readMetadata(filePath)
+    })
+
+    ipcMain.handle('writeMetadata', async (_event, { filePath, metadata }: { filePath: string, metadata: any }) => {
+        const { writeMetadata } = await import('../core/metadata')
+        return await writeMetadata(filePath, metadata)
     })
 }

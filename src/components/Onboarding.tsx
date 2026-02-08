@@ -18,6 +18,7 @@ type StepConfig = {
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
     // Tour state - simplified, no more dependency checking (handled by FirstRunModal)
+    // Tour state
     const [currentStepIndex, setCurrentStepIndex] = useState(0)
     const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null)
     const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -77,18 +78,18 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         },
         // Header items
         {
-            title: "Activity Logs",
-            desc: "Track detailed logs of your conversion tasks.",
-            icon: ScrollText,
-            targetId: "tour-logs-button",
-            placement: "bottom",
-            inflation: 6
-        },
-        {
             title: "Archive",
             desc: "Browse your history of converted files.",
             icon: FolderArchive,
             targetId: "tour-archive-button",
+            placement: "bottom",
+            inflation: 6
+        },
+        {
+            title: "Activity Logs",
+            desc: "Track detailed logs of your conversion tasks.",
+            icon: ScrollText,
+            targetId: "tour-logs-button",
             placement: "bottom",
             inflation: 6
         },
@@ -123,21 +124,23 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         const isInSettings = currentStep.targetId && settingsDrawerIds.includes(currentStep.targetId)
 
         // Handle Drawer
+        // We set this immediately. If the previous step was in the drawer and this one isn't,
+        // the drawer will start closing animation via its own component.
+        // Since the drawer is an overlay (fixed position), it doesn't affect the Header layout.
         if (isInSettings) {
             setSettingsOpen(true)
         } else {
             setSettingsOpen(false)
         }
 
-        // Measure with appropriate delay
+        // Measure function
         const measure = () => {
             if (currentStep.targetId) {
                 const el = document.getElementById(currentStep.targetId)
                 if (el) {
-                    // Scroll first
                     el.scrollIntoView({ behavior: 'auto', block: 'center' })
 
-                    // Wait a frame for scroll to complete, then measure
+                    // Standard double RAF ensures layout is settled for the current frame
                     requestAnimationFrame(() => {
                         requestAnimationFrame(() => {
                             const rect = el.getBoundingClientRect()
@@ -151,17 +154,14 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                         })
                     })
                 } else {
-                    // Retry quickly if element not found
                     measureRetryRef.current = setTimeout(measure, 50)
                 }
             }
         }
 
-        // Calculate delay based on transition type
-        let delay = 30
-        if (isInSettings) {
-            delay = 600 // Drawer opening/scrolling - ensure fully rendered
-        }
+        // Only delay if we are opening the drawer to allow it to render content
+        // Otherwise (closing drawer or navigating within same context), measure immediately.
+        const delay = isInSettings ? 600 : 0
 
         const timer = setTimeout(measure, delay)
 
@@ -200,6 +200,29 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
     const handleNext = () => {
         if (currentStepIndex < tourSteps.length - 1) {
+            const nextIndex = currentStepIndex + 1
+            const nextStep = tourSteps[nextIndex]
+
+            if (nextStep.targetId) {
+                const el = document.getElementById(nextStep.targetId)
+                if (el) {
+                    // 1. Scroll FIRST (instantly) if needed
+                    // This prevents the "jump" where the box goes to the old position,
+                    // then the page scrolls, then the box corrects itself.
+                    el.scrollIntoView({ behavior: 'instant', block: 'center' })
+
+                    // 2. Measure immediately after scrolling
+                    const rect = el.getBoundingClientRect()
+                    const inf = nextStep.inflation || 0
+                    setHighlightRect(new DOMRect(
+                        rect.x - inf,
+                        rect.y - inf,
+                        rect.width + (inf * 2),
+                        rect.height + (inf * 2)
+                    ))
+                }
+            }
+
             setCurrentStepIndex(prev => prev + 1)
         } else {
             onComplete()
@@ -245,8 +268,41 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     const isFirstStep = currentStepIndex === 0
 
     return (
-        <div className="fixed inset-0 z-[5000] pointer-events-auto">
-            {/* Spotlight Highlight Box */}
+        <div className="fixed inset-0 z-[5000] pointer-events-none">
+            {/* Blocker/Dimming Overlay - 4 parts to allow click-through in center */}
+            {highlightRect ? (
+                <>
+                    {/* Top */}
+                    <motion.div
+                        className="absolute bg-black/50 pointer-events-auto"
+                        animate={{ top: 0, left: 0, right: 0, height: highlightRect.top }}
+                        transition={snappySpring}
+                    />
+                    {/* Bottom */}
+                    <motion.div
+                        className="absolute bg-black/50 pointer-events-auto"
+                        animate={{ top: highlightRect.bottom, left: 0, right: 0, bottom: 0 }}
+                        transition={snappySpring}
+                    />
+                    {/* Left */}
+                    <motion.div
+                        className="absolute bg-black/50 pointer-events-auto"
+                        animate={{ top: highlightRect.top, left: 0, width: highlightRect.left, height: highlightRect.height }}
+                        transition={snappySpring}
+                    />
+                    {/* Right */}
+                    <motion.div
+                        className="absolute bg-black/50 pointer-events-auto"
+                        animate={{ top: highlightRect.top, left: highlightRect.right, right: 0, height: highlightRect.height }}
+                        transition={snappySpring}
+                    />
+                </>
+            ) : (
+                // Fallback full cover if no rect yet
+                <div className="absolute inset-0 bg-black/50 pointer-events-auto" />
+            )}
+
+            {/* Spotlight Highlight Box (Border Only) */}
             {highlightRect && (
                 <motion.div
                     layoutId="highlight-box"
@@ -262,7 +318,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                         ...snappySpring,
                         opacity: { duration: isFirstStep ? 0.7 : 0.15 }
                     }}
-                    style={{ boxShadow: '0 0 0 5000px rgba(0, 0, 0, 0.5)' }}
+                    // Removed boxShadow - using blockers instead
                     className="absolute border-2 border-blue-500 rounded-lg bg-transparent pointer-events-none z-10"
                 />
             )}

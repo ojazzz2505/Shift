@@ -31,10 +31,10 @@ const DOWNLOAD_URLS: Record<string, DepConfig> = {
         type: 'zip'
     },
     imagemagick: {
-        // Portable 7z version - NO INSTALLER!
-        url: 'https://imagemagick.org/archive/binaries/ImageMagick-7.1.2-11-portable-Q16-x64.7z',
-        extractPath: '', // Files are directly in the archive root
-        type: '7z'
+        // Dynamic resolution - scrapes directory for latest version
+        url: 'DYNAMIC:IMAGEMAGICK',
+        extractPath: '',
+        type: 'zip'
     },
     pandoc: {
         // Updated to latest version 3.8.3
@@ -61,11 +61,16 @@ const DOWNLOAD_URLS: Record<string, DepConfig> = {
         url: 'pdf2docx', // Name of package for pip
         extractPath: '',
         type: 'pip'
+    },
+    exiftool: {
+        // Dynamic resolution - fetches latest ExifTool version
+        url: 'DYNAMIC:EXIFTOOL',
+        extractPath: '',
+        type: 'zip'
     }
 }
 
 function downloadWithRedirects(url: string, dest: string, onProgress: (percent: number) => void, maxRedirects = 15): Promise<void> {
-    // ... (same as before)
     return new Promise((resolve, reject) => {
         if (maxRedirects <= 0) {
             reject(new Error('Too many redirects'))
@@ -122,8 +127,15 @@ function downloadWithRedirects(url: string, dest: string, onProgress: (percent: 
     })
 }
 
+function getArchiveExtension(url: string): 'zip' | '7z' {
+    const match = url.match(/\.(zip|7z)(?:[?#]|$|\/)/i)
+    if (match && match[1]) {
+        return match[1].toLowerCase() as 'zip' | '7z'
+    }
+    return 'zip'
+}
+
 async function extractZip(zipPath: string, destDir: string, subPath?: string, depName?: string): Promise<void> {
-    // ... (same as before)
     await fs.promises.mkdir(destDir, { recursive: true })
     console.log(`Extracting ${zipPath} to ${destDir}`)
     const cmd = `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force"`
@@ -154,7 +166,6 @@ async function extractZip(zipPath: string, destDir: string, subPath?: string, de
 }
 
 async function extract7z(archivePath: string, destDir: string): Promise<void> {
-    // ... (same as before)
     await fs.promises.mkdir(destDir, { recursive: true })
     console.log(`Extracting 7z ${archivePath} to ${destDir}`)
 
@@ -269,21 +280,193 @@ async function installPipPackage(packageName: string, onProgress: (percent: numb
     })
 }
 
+async function fetchLatestImageMagickUrl(): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const indexUrl = 'https://imagemagick.org/archive/binaries/'
+        https.get(indexUrl, (res) => {
+            let data = ''
+            res.on('data', chunk => data += chunk)
+            res.on('end', () => {
+                // Look for: ImageMagick-*.portable-Q16-x64.zip OR .7z
+                // The pattern is: ImageMagick-[version]-portable-Q16-x64.[ext]
+                const regex = /ImageMagick-[\d\.-]+-portable-Q16-x64\.(zip|7z)/g
+                const matches = data.match(regex)
+                if (matches && matches.length > 0) {
+                    const latestFilename = matches[matches.length - 1]
+                    resolve(`${indexUrl}${latestFilename}`)
+                } else {
+                    reject(new Error('Could not find ImageMagick portable zip/7z in directory listing'))
+                }
+            })
+        }).on('error', reject)
+    })
+}
+
+function fetchTextWithRedirects(url: string, maxRedirects = 10): Promise<string> {
+    return new Promise((resolve, reject) => {
+        if (maxRedirects <= 0) {
+            reject(new Error('Too many redirects'))
+            return
+        }
+
+        const protocol = url.startsWith('https') ? https : http
+        const req = protocol.get(url, { timeout: 20000 }, (res) => {
+            if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                let redirectUrl = res.headers.location
+                if (redirectUrl.startsWith('/')) {
+                    const urlObj = new URL(url)
+                    redirectUrl = `${urlObj.protocol}//${urlObj.host}${redirectUrl}`
+                }
+                res.resume()
+                fetchTextWithRedirects(redirectUrl, maxRedirects - 1)
+                    .then(resolve)
+                    .catch(reject)
+                return
+            }
+
+            if (res.statusCode !== 200) {
+                reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`))
+                return
+            }
+
+            let data = ''
+            res.on('data', chunk => data += chunk)
+            res.on('end', () => resolve(data))
+        })
+
+        req.on('error', reject)
+        req.on('timeout', () => {
+            req.destroy()
+            reject(new Error('Request timeout'))
+        })
+    })
+}
+
+async function fetchLatestExifToolUrl(): Promise<string> {
+    const indexUrl = 'https://exiftool.org/'
+    const html = await fetchTextWithRedirects(indexUrl)
+
+    const hrefRegex = /href\s*=\s*["']([^"']*exiftool-[^"']*\.zip[^"']*)["']/gi
+    const found: string[] = []
+    let match: RegExpExecArray | null = null
+    while ((match = hrefRegex.exec(html)) !== null) {
+        found.push(match[1])
+    }
+
+    if (found.length === 0) {
+        throw new Error('Could not find ExifTool zip in directory listing')
+    }
+
+    const normalizeUrl = (href: string) => {
+        if (href.startsWith('http')) return href
+        return new URL(href, indexUrl).toString()
+    }
+
+    const candidates = found
+        .map(normalizeUrl)
+        .filter(url => /exiftool-\d+(?:\.\d+)+(?:_\d+)?\.zip/i.test(url))
+
+    if (candidates.length === 0) {
+        throw new Error('Could not find ExifTool zip in directory listing')
+    }
+
+    const extractVersion = (url: string) => {
+        const verMatch = url.match(/exiftool-(\d+(?:\.\d+)+)(?:_\d+)?\.zip/i)
+        return verMatch ? verMatch[1] : '0'
+    }
+
+    const compareVersions = (a: string, b: string) => {
+        const pa = a.split('.').map(n => parseInt(n, 10))
+        const pb = b.split('.').map(n => parseInt(n, 10))
+        const len = Math.max(pa.length, pb.length)
+        for (let i = 0; i < len; i++) {
+            const na = pa[i] || 0
+            const nb = pb[i] || 0
+            if (na > nb) return 1
+            if (na < nb) return -1
+        }
+        return 0
+    }
+
+    const prefer64 = process.arch === 'x64'
+    const archCandidates = candidates.filter(url =>
+        prefer64 ? /_64\.zip/i.test(url) : /_32\.zip/i.test(url)
+    )
+    const pickFrom = archCandidates.length > 0 ? archCandidates : candidates
+
+    const latest = pickFrom
+        .map(url => ({ url, ver: extractVersion(url) }))
+        .sort((a, b) => compareVersions(a.ver, b.ver))
+        .pop()
+
+    if (!latest) {
+        throw new Error('Failed to determine latest ExifTool version')
+    }
+
+    return latest.url
+}
+
 export async function downloadDependency(
     name: string,
     binDir: string,
     onProgress: ProgressCallback
 ): Promise<boolean> {
-    const config = DOWNLOAD_URLS[name]
+    let config = DOWNLOAD_URLS[name] // Let is mutable for dynamic update
     if (!config) {
         onProgress({ dependency: name, percent: 0, status: 'error', message: `Unknown dependency: ${name}` })
         return false
     }
 
-    if (config.type === 'pip') {
+    // Resolve Dynamic URLs
+    if (config.url === 'DYNAMIC:IMAGEMAGICK') {
         try {
-            onProgress({ dependency: name, percent: 0, status: 'downloading' }) // status mapped to UI
-            // Check if python exists first
+            console.log('Fetching latest ImageMagick version...')
+            onProgress({ dependency: name, percent: 0, status: 'downloading', message: 'Finding latest version...' })
+            const dynamicUrl = await fetchLatestImageMagickUrl()
+            console.log(`Resolved ImageMagick URL: ${dynamicUrl}`)
+
+            // Determine type from extension
+            const is7z = dynamicUrl.toLowerCase().endsWith('.7z')
+
+            // Create a temp config with the resolved URL and correct type
+            config = {
+                ...config,
+                url: dynamicUrl,
+                type: is7z ? '7z' : 'zip'
+            }
+        } catch (e) {
+            const err = e as Error
+            console.error('Failed to resolve dynamic URL:', err.message)
+            onProgress({ dependency: name, percent: 0, status: 'error', message: `Ver check failed: ${err.message}` })
+            return false
+        }
+    }
+
+    if (config.url === 'DYNAMIC:EXIFTOOL') {
+        try {
+            console.log('Fetching latest ExifTool version...')
+            onProgress({ dependency: name, percent: 0, status: 'downloading', message: 'Finding latest version...' })
+            const dynamicUrl = await fetchLatestExifToolUrl()
+            console.log(`Resolved ExifTool URL: ${dynamicUrl}`)
+
+            config = {
+                ...config,
+                url: dynamicUrl,
+                type: 'zip'
+            }
+        } catch (e) {
+            const err = e as Error
+            console.error('Failed to resolve ExifTool URL:', err.message)
+            onProgress({ dependency: name, percent: 0, status: 'error', message: `Ver check failed: ${err.message}` })
+            return false
+        }
+    }
+
+    if (config.type === 'pip') {
+        // ... (existing pip logic)
+        try {
+            onProgress({ dependency: name, percent: 0, status: 'downloading' })
+            // ...
             try {
                 await execAsync('python --version')
             } catch {
@@ -299,6 +482,7 @@ export async function downloadDependency(
             onProgress({ dependency: name, percent: 100, status: 'done' })
             return true
         } catch (e) {
+            // ... (error handling)
             const error = e as Error
             console.error(`Error installing ${name}:`, error.message)
             onProgress({ dependency: name, percent: 0, status: 'error', message: error.message })
@@ -308,12 +492,12 @@ export async function downloadDependency(
 
     // Skip if no URL (like LibreOffice which is optional)
     if (!config.url) {
-        // ... (rest remains same)
         onProgress({ dependency: name, percent: 0, status: 'error', message: `${name} must be installed manually` })
         return false
     }
 
-    const urlExt = config.url.split('.').pop()?.toLowerCase() || 'zip'
+    // ... (rest of standard download logic)
+    const urlExt = getArchiveExtension(config.url)
     const filePath = path.join(binDir, `${name}_temp.${urlExt}`)
 
     try {
@@ -331,7 +515,17 @@ export async function downloadDependency(
         if (config.type === '7z') {
             await extract7z(filePath, binDir)
         } else {
+            // Updated extractZip call to handle generic extractions if needed
             await extractZip(filePath, binDir, config.extractPath || undefined, name)
+        }
+
+        // ExifTool on Windows ships as exiftool(-k).exe; rename to exiftool.exe for consistency
+        if (name === 'exiftool') {
+            const exifK = path.join(binDir, 'exiftool(-k).exe')
+            const exif = path.join(binDir, 'exiftool.exe')
+            if (fs.existsSync(exifK) && !fs.existsSync(exif)) {
+                await fs.promises.rename(exifK, exif)
+            }
         }
 
         await fs.promises.unlink(filePath)

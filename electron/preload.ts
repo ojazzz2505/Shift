@@ -34,7 +34,10 @@ contextBridge.exposeInMainWorld('electron', {
             'downloadDependency',
             'detectGpus',
             'deleteAllDependencies',
-            'selectFolder' // Added missing channel
+            'selectFolder', // Added missing channel
+            'readMetadata',
+            'writeMetadata',
+            'saveSilent'
         ]
         if (validChannels.includes(channel)) {
             return await ipcRenderer.invoke(channel, ...args)

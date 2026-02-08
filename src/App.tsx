@@ -9,19 +9,20 @@ import FirstRunModal from './components/FirstRunModal'
 import Onboarding from './components/Onboarding'
 import LogsPanel from './components/LogsPanel'
 import ArchivePanel from './components/ArchivePanel'
+import MetadataModal from './components/MetadataModal'
 import { useAppStore, type Task } from './store/appStore'
 import { Play, Trash2, Loader2, Square } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 function App() {
-    const { tasks, addTask, updateTask, removeTask, clearCompleted, addLog, addToArchive, removeAllTasks, hasCompletedOnboarding } = useAppStore()
+    const { tasks, addTask, updateTask, removeTask, clearCompleted, addLog, addToArchive, removeAllTasks, hasCompletedOnboarding, editingTaskId, setEditingTask } = useAppStore()
     const [missingDeps, setMissingDeps] = useState<string[]>([])
     const [showSplash, setShowSplash] = useState(true)
     const [showFirstRun, setShowFirstRun] = useState(false)
     const [isConverting, setIsConverting] = useState(false)
     const [isPaused, setIsPaused] = useState(false)
     const [showQuitConfirm, setShowQuitConfirm] = useState(false)
-    const [batchFormat, setBatchFormat] = useState('Select Format')
+    const [batchFormat, setBatchFormat] = useState('Select')
     const shouldStop = useRef(false)
     const pausedRef = useRef(false)
     const pauseResolver = useRef<((value: void | PromiseLike<void>) => void) | null>(null)
@@ -105,7 +106,7 @@ function App() {
                 file: { name: file.name, path: filePath },
                 status: 'ready',
                 progress: 0,
-                targetFormat: availableFormats[0] || 'MP4',
+                targetFormat: 'Select',
                 originalSize: file.size,
                 availableFormats
             }
@@ -198,7 +199,8 @@ function App() {
                     taskId: task.id,
                     inputPath: task.file.path,
                     targetFormat: task.targetFormat,
-                    outputDir
+                    outputDir,
+                    metadata: task.metadata
                 }) as { success: boolean; error?: string; outputPath?: string; outputSize?: number }
 
                 if (result.success) {
@@ -360,6 +362,7 @@ function App() {
                                             tasks={tasks}
                                             onRemove={removeTask}
                                             onFormatChange={(id, fmt) => updateTask(id, { targetFormat: fmt })}
+                                            onEditMetadata={setEditingTask}
                                         />
                                     </div>
                                 )}
@@ -484,6 +487,9 @@ function App() {
                             <SettingsDrawer />
                             <ArchivePanel />
                             <LogsPanel />
+                            <AnimatePresence>
+                                {editingTaskId && <MetadataModal />}
+                            </AnimatePresence>
                             {showFirstRun && (
                                 <FirstRunModal
                                     missingDeps={missingDeps}

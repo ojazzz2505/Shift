@@ -3,6 +3,7 @@ import path from 'path'
 import { app } from 'electron'
 import { mkdir } from 'fs/promises'
 import { conversionGraph } from './conversionGraph'
+import { writeMetadata } from './metadata'
 
 export interface ConversionProgress {
     taskId: string
@@ -37,8 +38,9 @@ function getBinaryPath(name: string): string {
 async function executeStep(
     inputPath: string,
     outputPath: string,
-    converter: 'ffmpeg' | 'imagemagick' | 'pandoc' | 'libreoffice' | 'python',
-    onProgress?: (percent: number) => void
+    converter: 'ffmpeg' | 'imagemagick' | 'pandoc' | 'libreoffice' | 'python' | 'xpdf',
+    onProgress?: (percent: number) => void,
+    metadata?: Record<string, string>
 ): Promise<string> {
     return new Promise((resolve, reject) => {
         let cmd: string
@@ -47,7 +49,16 @@ async function executeStep(
         switch (converter) {
             case 'ffmpeg':
                 cmd = getBinaryPath('ffmpeg')
-                args = ['-i', inputPath, '-y', '-progress', 'pipe:1', outputPath]
+                args = ['-i', inputPath, '-y', '-progress', 'pipe:1']
+
+                // Inject metadata if provided
+                if (metadata) {
+                    Object.entries(metadata).forEach(([key, value]) => {
+                        if (value) args.push('-metadata', `${key}=${value}`)
+                    })
+                }
+
+                args.push(outputPath)
                 break
             case 'imagemagick':
                 cmd = getBinaryPath('magick')
@@ -64,6 +75,13 @@ async function executeStep(
                 // Ensure output directory exists for libreoffice specifically if needed
                 const outFormat = path.extname(outputPath).slice(1)
                 args = ['--headless', '--convert-to', outFormat, '--outdir', outDir, inputPath]
+                break
+            case 'xpdf':
+                cmd = getBinaryPath('pdftotext')
+                // pdftotext [options] <PDF-file> [<text-file>]
+                // -enc UTF-8 ensures proper encoding
+                // -layout maintains original physical layout (optional but good for readability)
+                args = ['-enc', 'UTF-8', '-layout', inputPath, outputPath]
                 break
             case 'python':
                 // Use system python. pdf2docx should be installed.
@@ -137,7 +155,8 @@ export async function convert(
     inputPath: string,
     targetFormat: string,
     outputDir: string,
-    onProgress: ProgressCallback
+    onProgress: ProgressCallback,
+    metadata?: Record<string, string>
 ): Promise<string> {
     const ext = path.extname(inputPath).slice(1).toLowerCase()
     const baseName = path.basename(inputPath, path.extname(inputPath))
@@ -177,10 +196,23 @@ export async function convert(
             currentPath = await executeStep(currentPath, stepOutputPath, step.converter, (p) => {
                 const overallProgress = stepProgress + (p / totalSteps)
                 onProgress({ taskId, percent: Math.round(overallProgress), status: 'converting' })
-            })
+            }, isLast ? metadata : undefined)
         } catch (err: any) {
             onProgress({ taskId, percent: 0, status: 'error', message: err.message })
             throw err
+        }
+    }
+
+    // Apply metadata post-conversion if the last step wasn't FFmpeg
+    if (metadata && Object.keys(metadata).length > 0) {
+        const lastConverter = conversionPath[conversionPath.length - 1]?.converter
+        if (lastConverter !== 'ffmpeg') {
+            try {
+                await writeMetadata(currentPath, metadata)
+            } catch (err: any) {
+                onProgress({ taskId, percent: 0, status: 'error', message: `Metadata write failed: ${err.message}` })
+                throw err
+            }
         }
     }
 

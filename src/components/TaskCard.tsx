@@ -1,4 +1,4 @@
-import { FileVideo, FileImage, FileText, FileAudio, ArrowRight, X, Loader2, Check, AlertTriangle, Folder } from 'lucide-react'
+import { FileVideo, FileImage, FileText, FileAudio, ArrowRight, X, Loader2, Check, AlertTriangle, Folder, FilePenLine } from 'lucide-react'
 import { motion } from 'framer-motion'
 import SmartDropdown from './SmartDropdown'
 
@@ -14,6 +14,7 @@ interface TaskCardProps {
     availableFormats?: string[]
     onRemove: () => void
     onFormatChange: (fmt: string) => void
+    onEditMetadata: () => void
 }
 
 const getFileIcon = (name: string) => {
@@ -32,10 +33,52 @@ const formatBytes = (bytes: number) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
+const getSmartFormats = (filename: string): string[] => {
+    const ext = filename.split('.').pop()?.toLowerCase() || ''
+
+    // Video Formats
+    if (['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv', 'flv'].includes(ext)) {
+        return [
+            // Video
+            'MP4', 'MKV', 'AVI', 'MOV', 'WEBM', 'WMV', 'FLV', 'GIF',
+            // Audio (Extract)
+            'MP3', 'WAV', 'AAC', 'FLAC', 'OGG', 'M4A'
+        ]
+    }
+
+    // Audio Formats
+    if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma'].includes(ext)) {
+        return ['MP3', 'WAV', 'AAC', 'FLAC', 'OGG', 'M4A']
+    }
+
+    // Image Formats
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'ico', 'svg'].includes(ext)) {
+        return ['JPG', 'PNG', 'WEBP', 'GIF', 'BMP', 'TIFF', 'ICO', 'SVG']
+    }
+
+    // PDF
+    if (ext === 'pdf') {
+        return [
+            // Docs
+            'DOCX', 'TXT',
+            // Images
+            'PNG', 'JPG'
+        ]
+    }
+
+    // Docs (Pandoc supported)
+    if (['docx', 'doc', 'odt', 'rtf', 'txt', 'md', 'html', 'epub'].includes(ext)) {
+        return ['PDF', 'DOCX', 'TXT', 'HTML', 'MD', 'ODT', 'RTF', 'EPUB']
+    }
+
+    // Fallback
+    return ['MP4', 'MP3', 'JPG', 'PNG', 'PDF', 'DOCX']
+}
+
 export default function TaskCard({
     id, name, status, progress, targetFormat,
-    originalSize, convertedSize, outputPath, availableFormats,
-    onRemove, onFormatChange
+    originalSize, convertedSize, outputPath,
+    onRemove, onFormatChange, onEditMetadata
 }: TaskCardProps) {
     const Icon = getFileIcon(name)
     const ext = name.split('.').pop()?.toUpperCase() || '???'
@@ -49,10 +92,8 @@ export default function TaskCard({
         sizeInfo = `${formatBytes(originalSize)} -> ${formatBytes(convertedSize)} (${sign}${percent}%)`
     }
 
-    // Default formats if none provided
-    const formats = availableFormats && availableFormats.length > 0
-        ? availableFormats
-        : ['MP4', 'MKV', 'GIF', 'MP3', 'PNG', 'JPG', 'PDF', 'WEBP']
+    // Use smart formats based on file type
+    const formats = getSmartFormats(name)
 
     return (
         <motion.div
@@ -135,6 +176,21 @@ export default function TaskCard({
                                 <Folder className="w-3.5 h-3.5" />
                             </motion.button>
                         )}
+
+
+                        {status === 'ready' && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    onEditMetadata()
+                                }}
+                                className="p-1.5 rounded hover:bg-[#222] text-neutral-500 hover:text-purple-400 transition-colors"
+                                title="Edit Metadata"
+                            >
+                                <FilePenLine className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+
                         <button
                             onClick={onRemove}
                             className="p-1.5 rounded hover:bg-red-500/10 text-neutral-600 hover:text-red-400 transition-colors"
@@ -146,16 +202,18 @@ export default function TaskCard({
             </div>
 
             {/* Progress Bar */}
-            {status === 'converting' && (
-                <div className="h-0.5 bg-[#111]">
-                    <motion.div
-                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
-                        transition={{ duration: 0.3 }}
-                    />
-                </div>
-            )}
-        </motion.div>
+            {
+                status === 'converting' && (
+                    <div className="h-0.5 bg-[#111]">
+                        <motion.div
+                            className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progress}%` }}
+                            transition={{ duration: 0.3 }}
+                        />
+                    </div>
+                )
+            }
+        </motion.div >
     )
 }

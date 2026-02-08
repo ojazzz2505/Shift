@@ -22,7 +22,8 @@ export default function SplashScreen() {
                     className="text-white font-black text-[110px] leading-none z-10"
                     style={{
                         fontFamily: 'Inter, system-ui, sans-serif',
-                        letterSpacing: '-0.05em',
+                        letterSpacing: '-0.07em', // Tighter to ensure connection
+                        textShadow: '0 0 1px rgba(255,255,255,0.5)', // Fill the anti-aliasing gap
                         willChange: 'transform, opacity', // GPU hint
                         transform: 'translateZ(0)', // Force GPU layer
                     }}

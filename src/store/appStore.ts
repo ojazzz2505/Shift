@@ -11,6 +11,7 @@ export interface Task {
     convertedSize?: number
     outputPath?: string
     availableFormats?: string[]
+    metadata?: Record<string, string>
 }
 
 export interface ArchiveEntry {
@@ -44,6 +45,7 @@ interface AppState {
     activeFloatingPanel: 'logs' | 'archive' | null
     autoSaveLogs: boolean
     hasCompletedOnboarding: boolean
+    editingTaskId: string | null
 
     // Actions
     addTask: (task: Task) => void
@@ -67,6 +69,7 @@ interface AppState {
     addToArchive: (entry: ArchiveEntry) => void
     clearArchive: () => void
     clearCompleted: () => void
+    setEditingTask: (id: string | null) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -91,6 +94,7 @@ export const useAppStore = create<AppState>()(
             autoSaveArchive: false,
             autoSaveLogs: false,
             hasCompletedOnboarding: false,
+            editingTaskId: null,
 
             addTask: (task) => set((state) => ({ tasks: [...state.tasks, task] })),
             removeTask: (id) => set((state) => ({ tasks: state.tasks.filter(t => t.id !== id) })),
@@ -130,6 +134,7 @@ export const useAppStore = create<AppState>()(
             addToArchive: (entry) => set((state) => ({ archive: [entry, ...state.archive] })),
             clearArchive: () => set({ archive: [] }),
             clearCompleted: () => set((state) => ({ tasks: state.tasks.filter(t => t.status !== 'done') })),
+            setEditingTask: (id) => set({ editingTaskId: id }),
         }),
         {
             name: 'shift-storage',

@@ -15,6 +15,7 @@ interface FirstRunModalProps {
 
 const DEP_INFO: Record<string, { name: string; desc: string; size: string }> = {
     ffmpeg: { name: 'FFmpeg', desc: 'Video/Audio processing engine', size: '~85MB' },
+    exiftool: { name: 'ExifTool', desc: 'Universal metadata reader/writer', size: '~5MB' },
     imagemagick: { name: 'ImageMagick', desc: 'Image manipulation toolkit', size: '~15MB' },
     pandoc: { name: 'Pandoc', desc: 'Document conversion engine', size: '~35MB' },
     xpdf: { name: 'Xpdf Tools', desc: 'PDF to text extraction', size: '~10MB' },

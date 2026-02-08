@@ -3,7 +3,7 @@
  * Defines nodes (formats) and edges (converters), then finds shortest paths.
  */
 
-type ConverterType = 'ffmpeg' | 'imagemagick' | 'pandoc' | 'libreoffice' | 'python'
+type ConverterType = 'ffmpeg' | 'imagemagick' | 'pandoc' | 'libreoffice' | 'python' | 'xpdf'
 
 interface Edge {
     target: string
@@ -72,6 +72,9 @@ export class ConversionGraph {
 
         // PDF to DOCX (Python - pdf2docx)
         this.addEdge('pdf', 'docx', 'python')
+
+        // PDF to Text (XPDF - pdftotext)
+        this.addEdge('pdf', 'txt', 'xpdf')
 
         // eBook formats (Pandoc)
         this.addEdge('epub', 'pdf', 'pandoc')
